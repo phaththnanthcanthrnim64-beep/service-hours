@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แบบบันทึกการบำเพ็ญประโยชน์</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e5e7eb; font-family: 'Sarabun', sans-serif; font-size: 15px; color: #000; }
+  .bar { position: sticky; top: 0; background: #1e3a8a; padding: 10px; text-align: center; z-index: 2; }
+  .bar button { font: inherit; padding: 8px 18px; margin: 0 4px; border: 0; border-radius: 8px; cursor: pointer; }
+  .bar button:first-child { background: #fbbf24; font-weight: 700; }
+  .bar label { color: #fff; margin-left: 10px; font-size: 14px; }
+  .paper { width: 210mm; min-height: 297mm; margin: 20px auto; background: #fff; padding: 14mm 16mm; position: relative; box-shadow: 0 2px 12px rgba(0,0,0,.2); }
+  .no { position: absolute; right: 16mm; top: 10mm; font-size: 13px; }
+  h1 { text-align: center; font-size: 20px; margin: 10px 0 2px; }
+  h2 { text-align: center; font-size: 15px; font-weight: 400; margin: 0 0 14px; }
+  .info p { margin: 6px 0; line-height: 1.7; }
+  .val { border-bottom: 1px dotted #000; padding: 0 6px; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border: 1px solid #000; padding: 4px 6px; height: 29px; font-size: 14px; }
+  th { background: #f1f5f9; }
+  .c { text-align: center; } .r { text-align: right; } .s { font-size: 12px; }
+  .note { font-size: 13px; margin: 10px 0 0; }
+  .signs { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 20px; margin-top: 26px; text-align: center; line-height: 1.9; font-size: 14px; }
+  .printed { position: absolute; bottom: 8mm; right: 16mm; font-size: 11px; color: #555; }
+  .msg { text-align: center; padding: 60px; }
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: #fff; } .bar { display: none; } .paper { margin: 0; box-shadow: none; }
+    th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+  @media screen and (max-width: 220mm) {
+    .paper { width: 100%; min-height: 0; margin: 0; padding: 16px; }
+    .no, .printed { position: static; text-align: right; }
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button onclick="window.print()">พิมพ์ / บันทึกเป็น PDF</button>
+  <button onclick="window.close()">ปิด</button>
+  <label><input type="checkbox" id="blank"> แบบฟอร์มเปล่า (ไม่แสดงรายการที่บันทึกแล้ว)</label>
+</div>
+<div id="out"><p class="msg">กำลังโหลด...</p></div>
+
+<script src="/app.js"></script>
+<script>
+let data, school = '', term;
+(async () => {
+  try {
+    const me = await api('/api/me');
+    const id = me.role === 'student' ? me.id : new URLSearchParams(location.search).get('id');
+    if (!id) throw new Error('ไม่ได้ระบุนักศึกษา');
+    [data, { school }, term] = await Promise.all([api('/api/students/' + id), api('/api/config'), api('/api/term')]);
+    document.title = 'แบบบันทึกการบำเพ็ญประโยชน์ - ' + data.student.name;
+    render();
+    $('#blank').onchange = render;
+  } catch (e) { $('#out').innerHTML = `<p class="msg">${esc(e.message)}</p>`; }
+})();
+
+function render() {
+  const { student: s, logs } = data;
+  const blank = $('#blank').checked;
+  const assigns = logs.filter(l => l.type === 'assign').reverse();
+  const dones = blank ? [] : logs.filter(l => l.type === 'done').reverse();
+  const rows = Math.max(15 - dones.length, 5);
+  const reason = assigns.map(a => `${esc(a.text)} (${fmtH(a.hours)} ชม. วันที่ ${thDate(a.date)})`).join(', ');
+  const v = (x, w = '120px') => x ? `<b class="val">${x}</b>` : `<span class="val" style="display:inline-block;min-width:${w}">&nbsp;</span>`;
+  let n = 0;
+  $('#out').innerHTML = `<div class="paper">
+    <div class="no">เลขที่ ........../..........</div>
+    <h1>แบบบันทึกการบำเพ็ญประโยชน์ (ชั่วโมงงานปกครอง)</h1>
+    <h2>งานปกครอง ฝ่ายพัฒนากิจการนักเรียน นักศึกษา<br>${esc(school)}</h2>
+    <div class="info">
+      <p>ชื่อ-สกุล ${v(esc(s.name), '220px')} รหัสนักศึกษา ${v(esc(s.username))} ชั้นปี ${v(esc(s.level || ''), '90px')}</p>
+      <p>แผนกวิชา ${v(esc(s.department || ''), '160px')} ประเภทวิชา ${v(esc(s.group || ''), '140px')}</p>
+      <p>เหตุผลที่ต้องบำเพ็ญประโยชน์ ${v(reason, '380px')}</p>
+      <p>จำนวนชั่วโมงที่ต้องทำทั้งหมด ${v(fmtH(s.assigned), '40px')} ชั่วโมง
+        ${blank ? '' : `&nbsp; ทำแล้ว ${v(fmtH(s.done), '40px')} ชั่วโมง &nbsp; คงเหลือ ${v(fmtH(remaining(s)), '40px')} ชั่วโมง`}</p>
+      <p>${daysUntil(term.end) >= 0 ? `ต้องทำให้ครบภายในวันที่ ${v(thDate(term.end))} (สิ้น${esc(term.name)}) หากไม่ครบจะ<b>ติดดาวแดง</b> ชั่วโมงที่ค้างจะคูณสอง`
+        : `${esc(term.name)} สิ้นสุดแล้วเมื่อ ${v(thDate(term.end))} ให้ทำชั่วโมงที่ค้างให้ครบโดยเร็ว`}
+        ${s.red_stars ? `&nbsp; <b>ติดดาวแดงแล้ว ${s.red_stars} ครั้ง</b>` : ''}</p>
+    </div>
+    <table>
+      <thead><tr><th style="width:6%">ที่</th><th style="width:14%">วัน/เดือน/ปี</th><th>กิจกรรม / งานที่ปฏิบัติ</th>
+        <th style="width:14%">เวลา<br>(เริ่ม-เลิก)</th><th style="width:8%">ชม.</th><th style="width:20%">ลงชื่อผู้ควบคุม</th></tr></thead>
+      <tbody>
+        ${dones.map(l => `<tr><td class="c">${++n}</td><td class="c">${thDate(l.date)}</td><td>${esc(l.text)}${l.activity ? ` <span class="s">(${esc(l.activity)})</span>` : ''}</td>
+          <td></td><td class="c">${fmtH(l.hours)}</td><td class="s">บันทึกโดย ${esc(l.recorder || '-')}</td></tr>`).join('')}
+        ${Array.from({ length: rows }, () => `<tr><td class="c">${++n}</td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}
+      </tbody>
+      <tfoot><tr><td colspan="4" class="r"><b>รวมจำนวนชั่วโมง</b></td><td></td><td></td></tr></tfoot>
+    </table>
+    <p class="note">หมายเหตุ: ให้ครูหรือเจ้าหน้าที่ผู้ควบคุมลงลายมือชื่อทุกครั้งหลังปฏิบัติกิจกรรม แล้วนำแบบฟอร์มนี้ส่งงานปกครองเพื่อบันทึกชั่วโมงเข้าระบบ</p>
+    <div class="signs">
+      <div>ลงชื่อ ..................................................<br>(${esc(s.name)})<br>นักศึกษา</div>
+      <div>ลงชื่อ ..................................................<br>(..................................................)<br>ครูที่ปรึกษา</div>
+      <div>ลงชื่อ ..................................................<br>(..................................................)<br>ผู้ปกครอง</div>
+      <div>ลงชื่อ ..................................................<br>(..................................................)<br>หัวหน้างานปกครอง</div>
+    </div>
+    <div class="printed">พิมพ์จากระบบเมื่อ ${thDate(today())} ${new Date().toTimeString().slice(0, 5)} น.</div>
+  </div>`;
+}
+</script>
+</body>
+</html>

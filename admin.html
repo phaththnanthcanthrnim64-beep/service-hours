@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>หลังบ้าน - ระบบชั่วโมงงานปกครอง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="topbar-mobile"><button onclick="$('.sidebar').classList.toggle('open')">เมนู</button><b>ระบบชั่วโมงงานปกครอง</b></div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div>ชั่วโมงงานปกครอง<small>หลังบ้าน</small></div></div>
+    <nav class="nav">
+      <a href="#dash">ภาพรวม</a>
+      <a href="#students">นักศึกษา</a>
+      <a href="#bulk">ลงชั่วโมงหลายคน</a>
+      <a href="#reports">รายงาน</a>
+      <a href="#redstar">ดาวแดง</a>
+      <div class="label admin-only">ตั้งค่าระบบ</div>
+      <a href="#depts" class="admin-only">แผนกวิชา</a>
+      <a href="#levels" class="admin-only">ชั้นปี</a>
+      <a href="#types" class="admin-only">ประเภทกิจกรรม</a>
+      <a href="#staff" class="admin-only">ผู้ใช้งานระบบ</a>
+      <div class="label">บัญชีของฉัน</div>
+      <a href="#password">เปลี่ยนรหัสผ่าน</a>
+    </nav>
+    <div class="side-foot"><b id="meName"></b><span id="meRole"></span>
+      <button class="btn ghost sm" onclick="logout()">ออกจากระบบ</button></div>
+  </aside>
+  <main class="main" id="view"></main>
+</div>
+<script src="/app.js"></script>
+<script src="/admin.js"></script>
+</body>
+</html>

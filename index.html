@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ระบบชั่วโมงงานปกครอง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- หน้าเข้าสู่ระบบ -->
+<div id="login" class="login-page" hidden>
+  <div class="login-hero">
+    <img class="login-logo" src="/logo.png" alt="ตราวิทยาลัยเทคนิคชัยนาท" width="160" height="158">
+    <h1>ระบบชั่วโมงงานปกครอง</h1>
+    <p class="school"></p>
+    <p>บันทึกและติดตามชั่วโมงบำเพ็ญประโยชน์ของนักศึกษา พร้อมพิมพ์แบบฟอร์มไปใช้ได้ทันที</p>
+    <ul>
+      <li>ดูชั่วโมงที่ต้องทำ ทำแล้ว และคงเหลือ</li>
+      <li>พิมพ์แบบฟอร์มบันทึกการบำเพ็ญประโยชน์</li>
+      <li>ครูลงชั่วโมงและดูรายงานรายแผนก รายชั้นปีได้</li>
+    </ul>
+  </div>
+  <div class="login-box">
+    <form id="loginForm">
+      <h2>เข้าสู่ระบบ</h2>
+      <p class="muted">นักศึกษาใช้รหัสนักศึกษาเป็นชื่อผู้ใช้</p>
+      <div class="alert" hidden></div>
+      <label>ชื่อผู้ใช้ / รหัสนักศึกษา<input name="username" required autocomplete="username" autofocus></label>
+      <label>รหัสผ่าน<input type="password" name="password" required autocomplete="current-password"></label>
+      <button class="btn primary block">เข้าสู่ระบบ</button>
+      <p class="muted small center" style="margin-top:16px">ลืมรหัสผ่าน ติดต่อครูที่ปรึกษาหรืองานปกครอง</p>
+    </form>
+  </div>
+</div>
+
+<!-- หน้านักศึกษา -->
+<div id="student" hidden>
+  <header class="s-top">
+    <div class="wrap">
+      <div class="brand"><div>ระบบชั่วโมงงานปกครอง<small class="school"></small></div></div>
+      <div class="btns">
+        <button class="btn ghost" id="pwBtn">เปลี่ยนรหัสผ่าน</button>
+        <button class="btn ghost" onclick="logout()">ออกจากระบบ</button>
+      </div>
+    </div>
+  </header>
+  <main class="wrap s-hero" id="sMain"></main>
+</div>
+
+<script src="/app.js"></script>
+<script>
+(async () => {
+  api('/api/config', { noRedirect: true }).then(c => $$('.school').forEach(e => e.textContent = c.school)).catch(() => {});
+  const me = await api('/api/me', { noRedirect: true }).catch(() => null);
+  if (!me) return showLogin();
+  if (me.role !== 'student') return location.replace('/admin.html');
+  showStudent(me);
+})();
+
+function showLogin() {
+  $('#login').hidden = false;
+  $('#loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = $('button', e.target), alert = $('.alert', e.target);
+    btn.disabled = true; alert.hidden = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
+    try {
+      const u = await api('/api/login', { method: 'POST', body: Object.fromEntries(new FormData(e.target)), noRedirect: true });
+      location.replace(u.role === 'student' ? '/' : '/admin.html');
+    } catch (err) {
+      alert.textContent = err.message; alert.hidden = false; btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+      shake(e.target);
+    }
+  });
+}
+
+async function showStudent(me) {
+  $('#student').hidden = false;
+  $('#pwBtn').onclick = () => openModal({
+    title: 'เปลี่ยนรหัสผ่าน',
+    body: `<label>รหัสผ่านเดิม<input type="password" name="oldPassword" required></label>
+      <label>รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)<input type="password" name="newPassword" required minlength="6"></label>
+      <label>ยืนยันรหัสผ่านใหม่<input type="password" name="confirm" required minlength="6"></label>`,
+    onSubmit: async d => {
+      if (d.newPassword !== d.confirm) throw new Error('ยืนยันรหัสผ่านไม่ตรงกัน');
+      await api('/api/me/password', { method: 'POST', body: d });
+      toast('เปลี่ยนรหัสผ่านเรียบร้อย');
+    }
+  });
+
+  const [{ student: s, logs }, term] = await Promise.all([api('/api/students/' + me.id), api('/api/term')]);
+  const assigns = logs.filter(l => l.type === 'assign'), dones = logs.filter(l => l.type === 'done');
+  const p = pct(s.done, s.assigned), left = remaining(s);
+  const ringColor = left > 0 ? '#f59e0b' : '#22c55e';
+  const row = l => `<tr><td>${thDate(l.date)}</td><td>${reasonHtml(l)}${l.activity ? `<div class="small muted">${esc(l.activity)}</div>` : ''}</td><td class="num">${fmtH(l.hours)}</td></tr>`;
+
+  // เตือนกำหนดส่งก่อนติดดาวแดง
+  function deadlineCard() {
+    if (!(left > 0)) return '';
+    const d = daysUntil(term.end);
+    if (d < 0) return `<div class="alert-box danger">เลยวันสิ้น${esc(term.name)}แล้ว รีบทำชั่วโมงที่ค้าง ${fmtH(left)} ชม. และติดต่องานปกครอง</div>`;
+    return `<div class="countdown ${d <= 14 ? 'danger' : ''}">
+      <div class="cd-num"><b>${d}</b><span>วัน</span></div>
+      <div><b>ต้องทำให้ครบภายใน ${thDate(term.end)}</b> (สิ้น${esc(term.name)})
+        <div>ถ้าไม่ครบจะ<b>ติดดาวแดง</b> ชั่วโมงที่ค้าง ${fmtH(left)} ชม. จะคูณสองเป็น <b>${fmtH(left * 2)} ชม.</b></div></div></div>`;
+  }
+
+  $('#sMain').innerHTML = `
+    <div class="card profile">
+      <div class="ring" style="background:conic-gradient(${ringColor} ${p * 3.6}deg,#e5e7eb 0)"><div><span><b>${p}%</b><span class="small muted">ทำแล้ว</span></span></div></div>
+      <div style="flex:1;min-width:220px">
+        <h2>${esc(s.name)}</h2>
+        <p class="muted" style="margin:4px 0 10px">รหัส ${esc(s.username)} · ชั้น ${esc(s.level || '-')} · ${deptText(s)}</p>
+        ${!s.assigned ? '<span class="badge ok">ไม่มีชั่วโมงที่ต้องทำ</span>'
+          : left > 0 ? `<span class="badge warn">ยังต้องทำอีก ${fmtH(left)} ชั่วโมง</span>` : '<span class="badge ok">ทำชั่วโมงครบแล้ว</span>'}
+        ${s.red_stars ? ' ' + redStarBadge(s) : ''}
+      </div>
+      <a class="btn primary" href="/print.html" target="_blank">พิมพ์แบบฟอร์มบำเพ็ญประโยชน์</a>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div><div class="v">${fmtH(s.assigned)}</div><div class="k">ชั่วโมงที่ต้องทำ</div></div></div>
+      <div class="stat ok"><div><div class="v">${fmtH(s.done)}</div><div class="k">ทำแล้ว</div></div></div>
+      <div class="stat ${left > 0 ? 'bad' : 'ok'}"><div><div class="v">${fmtH(left)}</div><div class="k">คงเหลือ</div></div></div>
+    </div>
+
+    ${deadlineCard()}
+
+    <div class="card">
+      <h3 style="margin-bottom:6px">ขั้นตอนการทำชั่วโมง</h3>
+      <ol class="muted" style="margin:0;padding-left:20px">
+        <li>กดปุ่ม "พิมพ์แบบฟอร์มบำเพ็ญประโยชน์" แล้วพิมพ์ออกมา</li>
+        <li>ทำกิจกรรมแล้วให้ครูหรือเจ้าหน้าที่ผู้ควบคุมลงชื่อในแบบฟอร์มทุกครั้ง</li>
+        <li>นำแบบฟอร์มไปส่งงานปกครอง เพื่อบันทึกชั่วโมงเข้าระบบ</li>
+      </ol>
+    </div>
+
+    <div class="grid2" style="margin-bottom:40px">
+      <div class="card"><h3 style="margin-bottom:12px">คำสั่งให้ทำชั่วโมง</h3><div class="table-wrap"><table>
+        <thead><tr><th>วันที่</th><th>เหตุผล</th><th class="num">ชม.</th></tr></thead>
+        <tbody>${assigns.map(row).join('') || '<tr><td colspan="3" class="empty">ไม่มีคำสั่ง</td></tr>'}</tbody></table></div></div>
+      <div class="card"><h3 style="margin-bottom:12px">ชั่วโมงที่ทำแล้ว</h3><div class="table-wrap"><table>
+        <thead><tr><th>วันที่</th><th>กิจกรรม</th><th class="num">ชม.</th></tr></thead>
+        <tbody>${dones.map(row).join('') || '<tr><td colspan="3" class="empty">ยังไม่มีบันทึก</td></tr>'}</tbody></table></div></div>
+    </div>`;
+  countUp($('#sMain'));
+}
+</script>
+</body>
+</html>
